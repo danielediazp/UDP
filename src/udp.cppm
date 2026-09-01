@@ -110,12 +110,15 @@ inline constexpr std::uint16_t data_mx_sz = 1472;
   std::ranges::copy_n(ser_pkg.begin(), header_sz, header_bytes.begin());
 
   auto wire_header = std::bit_cast<Header>(header_bytes);
-  auto header = Header{.src_port = ntohs(wire_header.src_port),
-                       .dst_port = ntohs(wire_header.dst_port),
-                       .length = ntohs(wire_header.length),
-                       .checksum = ntohs(wire_header.checksum)};
 
-  return Package{.header = header,
+  const auto get_host_friendly_endian = [](const Header &h) {
+    return Header{.src_port = ntohs(h.src_port),
+                  .dst_port = ntohs(h.dst_port),
+                  .length = ntohs(h.length),
+                  .checksum = ntohs(h.checksum)};
+  };
+
+  return Package{.header = get_host_friendly_endian(wire_header),
                  .data = Data(ser_pkg.begin() + header_sz, ser_pkg.end())};
 }
 
