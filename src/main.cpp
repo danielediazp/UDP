@@ -24,18 +24,14 @@ int main(int argc, char *argv[]) {
   std::println("{}", udp_package);
 
   auto ser_pkg = udp::package::serialize(udp_package);
-  if (!ser_pkg.has_value()) {
-    std::println(stderr, "Unable to serialize udp package");
-    return 1;
-  }
 
   std::string ser_pkg_str;
-  ser_pkg_str.reserve(ser_pkg->size());
-  std::ranges::transform(*ser_pkg, std::back_inserter(ser_pkg_str),
+  ser_pkg_str.reserve(ser_pkg.size());
+  std::ranges::transform(ser_pkg, std::back_inserter(ser_pkg_str),
                          [](auto b) { return static_cast<char>(b); });
   std::println("serialize package: {}", ser_pkg_str);
 
-  auto pkg = udp::package::deserialize(*ser_pkg);
+  auto pkg = udp::package::deserialize(ser_pkg);
   if (!pkg.has_value()) {
     std::println(stderr, "Unable to deserialize udp package");
     return 1;
