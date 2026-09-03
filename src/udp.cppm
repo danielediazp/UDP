@@ -1,9 +1,9 @@
 module;
 
 #include <algorithm>
-#include <arpa/inet.h>
 #include <array>
 #include <bit>
+#include <cerrno>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -12,16 +12,17 @@ module;
 #include <string>
 #include <vector>
 
+#include <arpa/inet.h>
 #include <netinet/in.h>
-#include <stdexcept>
+#include <netinet/ip.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
 export module udp;
 
 export namespace udp {
-using Port = std::uint16_t;
-using Data = std::vector<std::byte>;
+using port = std::uint16_t;
+using datagram = std::vector<std::byte>;
 
 /**
  * @brief Swaps the bytes from little endian to big endian and vice versa.
@@ -43,8 +44,8 @@ namespace package {
 
 #pragma pack(push, 1) // Force the compiler to make the struct strictly 8 bytes
 struct Header {       // 64 bits
-  Port src_port{0};   // [0, 15]
-  Port dst_port{0};   // [16, 31]
+  port src_port{0};   // [0, 15]
+  port dst_port{0};   // [16, 31]
   std::uint16_t length{0};   // [32, 47]
   std::uint16_t checksum{0}; // [48, 63]
 };
@@ -56,8 +57,8 @@ inline constexpr std::size_t header_sz = sizeof(Header);
 // MTU limits are around 1500 bytes.
 struct Package {
   Header header; // [0, 64]
-  Data data; // [64, N] Size should be around 1472 to prevent package getting
-             // drops by MTU limits.
+  datagram data; // [64, N] Size should be around 1472 to prevent package
+                 // getting drops by MTU limits.
 };
 
 inline constexpr std::uint16_t data_mx_sz = 1472;
@@ -132,7 +133,7 @@ auto serialize(const Package &pkg) -> std::vector<std::byte> {
   };
 
   return Package{.header = get_host_friendly_endian(wire_header),
-                 .data = Data(ser_pkg.begin() + header_sz, ser_pkg.end())};
+                 .data = datagram(ser_pkg.begin() + header_sz, ser_pkg.end())};
 }
 
 // TODO: Implement. The checksum is the 16 bits one complements sum of the IP
@@ -141,16 +142,27 @@ auto compute_check_sum(Package &pkg) -> std::uint16_t { return 0; }
 
 } // namespace package
 
+inline constexpr std::size_t iphdr_sz = sizeof(struct ip);
+
 class udp_socket_creation_error : public std::runtime_error {
 public:
   using std::runtime_error::runtime_error;
 };
 
-enum class udp_error { mtu_limit_exceeded, send_failed };
+enum class send_error {
+  mtu_limit_exceeded,
+  send_failed,
+};
+enum class receive_error {
+  socket_crashed,
+  malformed_package,
+  corrupted_package,
+};
 
 class UDP {
 public:
-  UDP() {
+  UDP(port src_port, port dst_port, std::string dst_addr)
+      : src_port_{src_port}, dst_port_(dst_port), dst_addr_(dst_addr) {
     socket_fd_ = socket(AF_INET, SOCK_RAW, IPPROTO_UDP);
     if (socket_fd_ < 0) {
       throw udp_socket_creation_error(
@@ -166,23 +178,61 @@ public:
     close(socket_fd_);
   }
 
-  int receive(const package::Package &package, Port src_port, Port dst_port) {
-    return 0;
+  [[nodiscard]] std::expected<package::Package, receive_error> receive() {
+    std::vector<std::byte> buff;
+    buff.resize(1501);
+    while (true) {
+      ssize_t bytes =
+          ::recvfrom(socket_fd_, buff.data(), buff.size(), 0, nullptr, nullptr);
+
+      if (bytes < 0) {
+        // Receive a signal mid call, retry
+        if (errno == EINTR) {
+          continue;
+        }
+
+        return std::unexpected(receive_error::socket_crashed);
+      }
+
+      if (bytes < iphdr_sz) {
+        continue;
+      }
+
+      auto it_buff_begin = buff.begin() + iphdr_sz;
+      auto it_buff_end = it_buff_begin + (bytes - iphdr_sz);
+      std::vector<std::byte> upd_dt{it_buff_begin, it_buff_end};
+      auto pkg = package::deserialize(upd_dt);
+      if (!pkg.has_value()) {
+        return std::unexpected(receive_error::malformed_package);
+      }
+
+      // We don't own this package. The kernel returns all matching data for the
+      // protocol for raw sockets since they are not bind to a port
+      const auto &pkg_hd = pkg->header;
+      if (pkg_hd.dst_port != src_port_) {
+        continue;
+      }
+
+      if (pkg_hd.checksum != 0 && pkg_hd.checksum != compute_check_sum(*pkg)) {
+        return std::unexpected(receive_error::corrupted_package);
+      }
+
+      return std::move(*pkg);
+    }
   }
 
-  auto send(Data dt, Port src_port, Port dst_port, const std::string &dst_addr)
-      -> std::expected<void, udp_error> {
+  [[nodiscard]] auto send(datagram dt) -> std::expected<void, send_error> {
 
     auto data_sz = dt.size();
 
     if (data_sz > package::data_mx_sz) {
-      return std::unexpected(udp_error::mtu_limit_exceeded);
+      return std::unexpected(send_error::mtu_limit_exceeded);
     }
 
     auto hd = package::Header{
-        .src_port = src_port,
-        .dst_port = dst_port,
-        .length = static_cast<std::uint16_t>(data_sz),
+        .src_port = src_port_,
+        .dst_port = dst_port_,
+        .length = static_cast<std::uint16_t>(data_sz + package::header_sz),
     };
     auto pkg = package::Package{.header = hd, .data = std::move(dt)};
     pkg.header.checksum = package::compute_check_sum(pkg);
@@ -190,16 +240,16 @@ public:
     sockaddr_in dest_addr{};
     dest_addr.sin_family = AF_INET;
     dest_addr.sin_port = pkg.header.dst_port;
-    dest_addr.sin_addr.s_addr = ::inet_addr(dst_addr.data());
+    dest_addr.sin_addr.s_addr = ::inet_addr(dst_addr_.data());
 
     auto pkg_bytes = package::serialize(pkg);
 
     ssize_t bytes_sent =
-        sendto(socket_fd_, pkg_bytes.data(), pkg_bytes.size(), 0,
-               reinterpret_cast<sockaddr *>(&dest_addr), sizeof(dst_addr));
+        ::sendto(socket_fd_, pkg_bytes.data(), pkg_bytes.size(), 0,
+                 reinterpret_cast<sockaddr *>(&dest_addr), sizeof(dest_addr));
 
     if (bytes_sent < 0) {
-      return std::unexpected(udp_error::send_failed);
+      return std::unexpected(send_error::send_failed);
     }
 
     return {};
@@ -224,5 +274,8 @@ public:
 
 private:
   int socket_fd_ = -1;
+  port src_port_;
+  port dst_port_;
+  std::string dst_addr_;
 };
 } // namespace udp

@@ -1,42 +1,36 @@
-#include <algorithm>
+
 #include <cstddef>
-#include <cstdio>
+#include <cstdlib>
 #include <print>
-#include <span>
+#include <ranges>
 #include <vector>
 
 import udp;
 import udp_representation;
 
 int main(int argc, char *argv[]) {
-  udp::package::Header header{
-      .src_port = 97, .dst_port = 99, .length = 65, .checksum = 66};
-  std::println("{}", header);
+  udp::UDP sender{500, 600, "127.0.0.1"};
+  udp::UDP receiver{600, 500, "127.0.0.1"};
 
   std::string data_str = "Daniel says hi!";
-  auto bytes_data = std::as_bytes(std::span(data_str));
+  auto dt = data_str |
+            std::views::transform([](char c) { return std::byte(c); }) |
+            std::ranges::to<std::vector<std::byte>>();
 
-  std::vector<std::byte> data;
-  data.reserve(data_str.size());
-  data.insert(data.end(), bytes_data.begin(), bytes_data.end());
-
-  udp::package::Package udp_package{.header = header, .data = data};
-  std::println("{}", udp_package);
-
-  auto ser_pkg = udp::package::serialize(udp_package);
-
-  std::string ser_pkg_str;
-  ser_pkg_str.reserve(ser_pkg.size());
-  std::ranges::transform(ser_pkg, std::back_inserter(ser_pkg_str),
-                         [](auto b) { return static_cast<char>(b); });
-  std::println("serialize package: {}", ser_pkg_str);
-
-  auto pkg = udp::package::deserialize(ser_pkg);
-  if (!pkg.has_value()) {
-    std::println(stderr, "Unable to deserialize udp package");
-    return 1;
+  if (!sender.send(dt)) {
+    std::println("Sender failed to send the package");
+    return EXIT_FAILURE;
   }
 
-  std::println("deserialize package: {}", *pkg);
-  return 0;
+  std::println("Successfully submitted the package");
+
+  auto rc = receiver.receive();
+  if (!rc) {
+    std::println("Receiver failed to receive package");
+    return EXIT_FAILURE;
+  }
+
+  std::println("got package: {}", *rc);
+
+  return EXIT_SUCCESS;
 }
