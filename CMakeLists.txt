@@ -16,4 +16,7 @@ target_sources(udp
         FILES 
             src/udp.cppm
             src/udp_representation.cppm
+            src/checksum.cppm
+            src/package.cppm
+            src/utils.cppm
 )

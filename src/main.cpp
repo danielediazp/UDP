@@ -9,8 +9,8 @@ import udp;
 import udp_representation;
 
 int main(int argc, char *argv[]) {
-  udp::UDP sender{500, 600, "127.0.0.1"};
-  udp::UDP receiver{600, 500, "127.0.0.1"};
+  udp::UDPSocket sender{600, "127.0.0.1", 500};
+  udp::UDPSocket receiver{500, "127.0.0.1", 600};
 
   std::string data_str = "Daniel says hi!";
   auto dt = data_str |
@@ -24,7 +24,7 @@ int main(int argc, char *argv[]) {
 
   std::println("Successfully submitted the package");
 
-  auto rc = receiver.receive();
+  auto rc = receiver.recv();
   if (!rc) {
     std::println("Receiver failed to receive package");
     return EXIT_FAILURE;
