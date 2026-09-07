@@ -10,6 +10,7 @@ include(CTest)
 enable_testing()
 
 add_executable(udp src/main.cpp)
+target_compile_options(udp PRIVATE -Wall -Wextra)
 target_sources(udp
     PRIVATE
         FILE_SET CXX_MODULES
