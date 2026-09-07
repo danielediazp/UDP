@@ -161,7 +161,7 @@ auto deserialize(const std::vector<std::byte> &ser_pkg)
   return Package{
       .header = net_header_swap(wire_header),
       .data = datagram(ser_pkg.begin() + header_sz,
-                       ser_pkg.end()) // Can be copied as is because indian
+                       ser_pkg.end()) // Can be copied as is because endian
                                       // format only matter for multi byte words
   };
 }
