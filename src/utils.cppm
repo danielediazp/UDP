@@ -13,8 +13,7 @@ export namespace utils {
  *
  * @return std::uint16_t the value swap to big endian format.
  */
-[[nodiscard]] constexpr auto net_short_swaps(std::uint16_t v) noexcept
-    -> std::uint16_t {
+constexpr auto net_short_swaps(std::uint16_t v) noexcept -> std::uint16_t {
   if constexpr (std::endian::native == std::endian::little) {
     return std::byteswap(v);
   }

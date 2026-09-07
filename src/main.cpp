@@ -8,11 +8,11 @@
 import udp;
 import udp_representation;
 
-int main(int argc, char *argv[]) {
+int main() {
   udp::UDPSocket sender{600, "127.0.0.1", 500};
   udp::UDPSocket receiver{500, "127.0.0.1", 600};
 
-  std::string data_str = "Daniel says hi!";
+  std::string data_str = "Daniel says hi! through this package";
   auto dt = data_str |
             std::views::transform([](char c) { return std::byte(c); }) |
             std::ranges::to<std::vector<std::byte>>();
