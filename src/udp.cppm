@@ -4,9 +4,9 @@ module;
 #include <array>
 #include <bit>
 #include <cerrno>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <ctime>
 #include <expected>
 #include <limits>
 #include <optional>
@@ -20,6 +20,7 @@ module;
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 export module udp;
@@ -70,6 +71,17 @@ public:
       throw udp_socket_creation_error(
           "Unable to create socket for UDPSocket instance");
     }
+
+    timeval tv{
+        .tv_sec = static_cast<time_t>(read_timeout_),
+        .tv_usec = 0,
+    };
+
+    if (::setsockopt(socket_fd_, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) <
+        0) {
+      ::close(socket_fd_);
+      throw udp_socket_creation_error("Unable to set the receive timeout");
+    }
   }
 
   ~UDPSocket() {
@@ -85,14 +97,7 @@ public:
         std::numeric_limits<std::uint16_t>::max() + 1;
     std::array<std::byte, max_package_size> buff{};
 
-    auto start_time = std::chrono::steady_clock::now();
     while (true) {
-
-      auto curr_time = std::chrono::steady_clock::now();
-      if (curr_time - start_time >= read_timeout_) {
-        return std::unexpected(receive_error::timeout);
-      }
-
       sockaddr_in addr{};
       addr.sin_family = AF_INET;
       addr.sin_addr = {.s_addr = INADDR_ANY};
@@ -104,6 +109,10 @@ public:
         // Receive a signal mid call, retry
         if (errno == EINTR) {
           continue;
+        }
+
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+          return std::unexpected(receive_error::timeout);
         }
 
         return std::unexpected(receive_error::socket_crashed);
@@ -238,7 +247,7 @@ private:
   std::optional<port> src_port_;
   port dst_port_;
   std::string dst_addr_;
-  std::chrono::seconds read_timeout_;
+  std::uint64_t read_timeout_;
 
   /**
    * @brief Resolves the local and remote IPv4 addresses for this socket's
