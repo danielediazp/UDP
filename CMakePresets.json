@@ -4,11 +4,11 @@
     "configurePresets": [
         {
             "name": "default",
-            "displayName": "Ninja + LLVM Clang (C++20 modules)",
+            "displayName": "Ninja + GCC (C++23 modules)",
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/build",
             "cacheVariables": {
-                "CMAKE_CXX_COMPILER": "/opt/homebrew/opt/llvm/bin/clang++"
+                "CMAKE_CXX_COMPILER": "/usr/bin/g++"
             }
         }
     ],
