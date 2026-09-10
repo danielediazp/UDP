@@ -1,5 +1,12 @@
 module;
 
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <unistd.h>
+
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -16,13 +23,6 @@ module;
 #include <utility>
 #include <vector>
 
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <netinet/ip.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <unistd.h>
-
 export module udp;
 import package;
 import checksum;
@@ -36,7 +36,7 @@ using datagram = std::vector<std::byte>;
 inline constexpr ssize_t iphdr_sz = sizeof(struct ip);
 
 class udp_socket_creation_error : public std::runtime_error {
-public:
+ public:
   using std::runtime_error::runtime_error;
 };
 
@@ -60,11 +60,13 @@ enum class receive_error {
 };
 
 class UDPSocket {
-public:
+ public:
   UDPSocket(port dst_port, std::string dst_addr,
             std::optional<port> src_port = std::nullopt,
             std::uint64_t read_timeout = 2)
-      : src_port_{src_port}, dst_port_(dst_port), dst_addr_(dst_addr),
+      : src_port_{src_port},
+        dst_port_(dst_port),
+        dst_addr_(dst_addr),
         read_timeout_(read_timeout) {
     socket_fd_ = ::socket(AF_INET, SOCK_RAW, IPPROTO_UDP);
     if (socket_fd_ < 0) {
@@ -103,7 +105,7 @@ public:
       addr.sin_addr = {.s_addr = INADDR_ANY};
       socklen_t addrlen = sizeof(addr);
       ssize_t bytes = ::recvfrom(socket_fd_, buff.data(), buff.size(), 0,
-                                 reinterpret_cast<sockaddr *>(&addr), &addrlen);
+                                 reinterpret_cast<sockaddr*>(&addr), &addrlen);
 
       if (bytes < 0) {
         // Receive a signal mid call, retry
@@ -141,7 +143,7 @@ public:
 
       // We don't own this package. The kernel returns all matching data for the
       // protocol for raw sockets since they are not bind to a port
-      const auto &pkg_hd = pkg->header;
+      const auto& pkg_hd = pkg->header;
       if (src_port_.has_value() && pkg_hd.dst_port != src_port_) {
         continue;
       }
@@ -165,7 +167,6 @@ public:
   }
 
   [[nodiscard]] auto send(datagram dt) -> std::expected<void, send_error> {
-
     auto data_sz = dt.size();
 
     if (data_sz > package::data_mx_sz) {
@@ -204,7 +205,7 @@ public:
 
     ssize_t bytes_sent =
         ::sendto(socket_fd_, pkg_as_bytes.data(), pkg_as_bytes.size(), 0,
-                 reinterpret_cast<sockaddr *>(&dest_addr), sizeof(dest_addr));
+                 reinterpret_cast<sockaddr*>(&dest_addr), sizeof(dest_addr));
 
     if (bytes_sent < 0) {
       return std::unexpected(send_error::send_failed);
@@ -214,19 +215,20 @@ public:
   }
 
   // Delete to prevent double socket closure
-  UDPSocket(const UDPSocket &other) = delete;
-  UDPSocket &operator=(const UDPSocket &other) = delete;
+  UDPSocket(const UDPSocket& other) = delete;
+  UDPSocket& operator=(const UDPSocket& other) = delete;
 
-  UDPSocket(UDPSocket &&other) noexcept
-      : socket_fd_(other.socket_fd_), src_port_(other.src_port_),
-        dst_port_(other.dst_port_), dst_addr_(std::move(other.dst_addr_)),
+  UDPSocket(UDPSocket&& other) noexcept
+      : socket_fd_(other.socket_fd_),
+        src_port_(other.src_port_),
+        dst_port_(other.dst_port_),
+        dst_addr_(std::move(other.dst_addr_)),
         read_timeout_(other.read_timeout_) {
     other.socket_fd_ = -1;
   }
 
-  UDPSocket &operator=(UDPSocket &&other) noexcept {
+  UDPSocket& operator=(UDPSocket&& other) noexcept {
     if (this != &other) {
-
       // Release what we own
       if (socket_fd_ != -1) {
         ::close(socket_fd_);
@@ -242,7 +244,7 @@ public:
     return *this;
   }
 
-private:
+ private:
   int socket_fd_ = -1;
   std::optional<port> src_port_;
   port dst_port_;
@@ -273,7 +275,7 @@ private:
       return std::nullopt;
     }
 
-    if (::connect(socket_fd_, reinterpret_cast<sockaddr *>(&target_addr),
+    if (::connect(socket_fd_, reinterpret_cast<sockaddr*>(&target_addr),
                   sizeof(target_addr)) < 0) {
       return std::nullopt;
     }
@@ -282,7 +284,7 @@ private:
     local_addr.sin_family = AF_INET;
     socklen_t local_addr_sz = sizeof(local_addr);
 
-    if (::getsockname(socket_fd_, reinterpret_cast<sockaddr *>(&local_addr),
+    if (::getsockname(socket_fd_, reinterpret_cast<sockaddr*>(&local_addr),
                       &local_addr_sz) < 0) {
       return std::nullopt;
     }
@@ -293,4 +295,4 @@ private:
     };
   }
 };
-} // namespace udp
+}  // namespace udp

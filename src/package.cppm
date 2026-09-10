@@ -1,5 +1,7 @@
 module;
 
+#include <netinet/ip.h>
+
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -9,8 +11,6 @@ module;
 #include <span>
 #include <vector>
 
-#include <netinet/ip.h>
-
 export module package;
 import utils;
 
@@ -18,12 +18,12 @@ export namespace package {
 using port = std::uint16_t;
 using datagram = std::vector<std::byte>;
 
-#pragma pack(push, 1) // Force the compiler to make the struct strictly 8 bytes
-struct Header {       // 64 bits
-  port src_port{0};   // [0, 15]
-  port dst_port{0};   // [16, 31]
-  std::uint16_t length{0};   // [32, 47]
-  std::uint16_t checksum{0}; // [48, 63]
+#pragma pack(push, 1)  // Force the compiler to make the struct strictly 8 bytes
+struct Header {        // 64 bits
+  port src_port{0};    // [0, 15]
+  port dst_port{0};    // [16, 31]
+  std::uint16_t length{0};    // [32, 47]
+  std::uint16_t checksum{0};  // [48, 63]
 };
 #pragma pack(pop)
 
@@ -38,14 +38,15 @@ static_assert(header_sz == expected_hd_sz,
 // UDP header is 8 bytes
 // Data is the rest keeping it bellow 1500 to ensure delivery
 struct Package {
-  Header header; // [0, 64]
-  datagram data; // [64, N] recommended size of a maximum of 1432 bytes, so it
-                 // doesn't get drop by ethernet cable limits respecting the MTU
+  Header header;  // [0, 64]
+  datagram
+      data;  // [64, N] recommended size of a maximum of 1432 bytes, so it
+             // doesn't get drop by ethernet cable limits respecting the MTU
 };
 
 inline constexpr std::uint16_t data_mx_sz = 1432;
 
-auto net_header_swap(const Header &header) -> Header {
+auto net_header_swap(const Header& header) -> Header {
   return Header{
       .src_port = utils::net_short_swaps(header.src_port),
       .dst_port = utils::net_short_swaps(header.dst_port),
@@ -55,7 +56,7 @@ auto net_header_swap(const Header &header) -> Header {
 }
 
 #pragma pack(push, 1)
-struct PseudoHeader { // 96 bits
+struct PseudoHeader {  // 96 bits
   std::uint32_t src_addr{0};
   std::uint32_t dest_addr{0};
   std::uint8_t zero{0};
@@ -100,8 +101,7 @@ auto get_udp_pshdr_as_bytes(std::uint32_t src_addr, std::uint32_t dest_addr,
  * @return std::expected<std::vector<std::byte>, udp_error> the vector of bytes
  * first 8 byte entries represent the header and the rest the data.
  */
-auto serialize(const Package &pkg) -> std::vector<std::byte> {
-
+auto serialize(const Package& pkg) -> std::vector<std::byte> {
   auto data_sz = pkg.data.size();
 
   std::vector<std::byte> ser_pkg;
@@ -113,16 +113,15 @@ auto serialize(const Package &pkg) -> std::vector<std::byte> {
 
   ser_pkg.insert(
       ser_pkg.end(), pkg.data.begin(),
-      pkg.data.end()); // Copy as is since it is already in byte format
+      pkg.data.end());  // Copy as is since it is already in byte format
 
   return ser_pkg;
 }
 
 enum class wire_format_error { too_few_bytes };
 
-auto insert_checksum_in_pkg(std::vector<std::byte> &pkg, std::uint16_t checksum)
+auto insert_checksum_in_pkg(std::vector<std::byte>& pkg, std::uint16_t checksum)
     -> std::expected<void, wire_format_error> {
-
   if (pkg.size() < header_sz) {
     return std::unexpected(wire_format_error::too_few_bytes);
   }
@@ -147,7 +146,7 @@ auto insert_checksum_in_pkg(std::vector<std::byte> &pkg, std::uint16_t checksum)
  * @return std::expected<package::Package, wire_format_error> The package in
  * human readable format.
  */
-auto deserialize(const std::vector<std::byte> &ser_pkg)
+auto deserialize(const std::vector<std::byte>& ser_pkg)
     -> std::expected<Package, wire_format_error> {
   if (ser_pkg.size() < header_sz) {
     return std::unexpected(wire_format_error::too_few_bytes);
@@ -160,10 +159,11 @@ auto deserialize(const std::vector<std::byte> &ser_pkg)
 
   return Package{
       .header = net_header_swap(wire_header),
-      .data = datagram(ser_pkg.begin() + header_sz,
-                       ser_pkg.end()) // Can be copied as is because endian
-                                      // format only matter for multi byte words
+      .data =
+          datagram(ser_pkg.begin() + header_sz,
+                   ser_pkg.end())  // Can be copied as is because endian
+                                   // format only matter for multi byte words
   };
 }
 
-} // namespace package
+}  // namespace package

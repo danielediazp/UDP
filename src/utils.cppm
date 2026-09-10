@@ -21,4 +21,4 @@ constexpr auto net_short_swaps(std::uint16_t v) noexcept -> std::uint16_t {
   return v;
 }
 
-} // namespace utils
+}  // namespace utils

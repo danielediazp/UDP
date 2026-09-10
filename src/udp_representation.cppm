@@ -9,10 +9,11 @@ export module udp_representation;
 
 import package;
 
-export template <> struct std::formatter<package::Header> {
-  constexpr auto parse(std::format_parse_context &ctx) { return ctx.begin(); }
+export template <>
+struct std::formatter<package::Header> {
+  constexpr auto parse(std::format_parse_context& ctx) { return ctx.begin(); }
 
-  auto format(const package::Header &h, std::format_context &ctx) const {
+  auto format(const package::Header& h, std::format_context& ctx) const {
     return std::format_to(
         ctx.out(),
         "Header(src_port: {}, dst_port: {}, length: {}, checksum: {})",
@@ -20,10 +21,11 @@ export template <> struct std::formatter<package::Header> {
   }
 };
 
-export template <> struct std::formatter<package::Package> {
-  constexpr auto parse(std::format_parse_context &ctx) { return ctx.begin(); }
+export template <>
+struct std::formatter<package::Package> {
+  constexpr auto parse(std::format_parse_context& ctx) { return ctx.begin(); }
 
-  auto format(const package::Package &p, std::format_context &ctx) const {
+  auto format(const package::Package& p, std::format_context& ctx) const {
     std::string data_as_str;
     data_as_str.reserve(p.data.size());
     std::ranges::transform(p.data, std::back_inserter(data_as_str),

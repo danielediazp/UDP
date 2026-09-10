@@ -10,7 +10,7 @@ export module checksum;
 export namespace checksum {
 
 inline constexpr std::uint16_t max_uint16 =
-    std::numeric_limits<std::uint16_t>::max(); // 0xFFFF
+    std::numeric_limits<std::uint16_t>::max();  // 0xFFFF
 inline constexpr std::uint8_t byte_sz_as_bits = 8;
 
 auto checksum_acc(std::span<const std::byte> sp) -> std::uint32_t {
@@ -57,4 +57,4 @@ auto checksum_acc(std::span<const std::byte> sp) -> std::uint32_t {
   auto checksum = static_cast<std::uint16_t>(~sum);
   return checksum == 0 ? max_uint16 : checksum;
 }
-} // namespace checksum
+}  // namespace checksum
